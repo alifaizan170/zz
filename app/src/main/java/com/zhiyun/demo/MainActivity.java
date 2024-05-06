@@ -1,6 +1,7 @@
 package com.zhiyun.demo;
 
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
@@ -71,22 +72,26 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         int itemId = item.getItemId();
-
-        switch (itemId) {
-            case R.id.setting:
-                toSetting();
-                break;
-            case R.id.scan: {
-                if (isCanning) {
-                    stopScanBle();
-                } else {
-                    startScanBle();
-                }
-
-                break;
+        if (itemId == R.id.app_info) {
+            goToAppInfoPage();
+        }
+        if (itemId == R.id.location) {
+            goToLocationPage();
+        }
+        if (itemId == R.id.scan) {
+            if (isCanning) {
+                stopScanBle();
+            } else {
+                startScanBle();
             }
         }
         return true;
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopScanBle();
     }
 
     private void setView() {
@@ -99,8 +104,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (device.isConnected()) {
                     device.disconnect();
-                }
-                else {
+                } else {
                     binding.progress.setVisibility(View.VISIBLE);
                     // Subscribe to the connection status
                     device.setStateListener(new Device.StatusListener() {
@@ -119,7 +123,7 @@ public class MainActivity extends AppCompatActivity {
                                 @Override
                                 public void run() {
                                     String msg = translateKeyType(keyType) + "  " + translateKeyEvent(keyEvent);
-                                    Log.d(TAG,  msg);
+                                    Log.d(TAG, msg);
                                     Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show();
                                 }
                             });
@@ -141,7 +145,7 @@ public class MainActivity extends AppCompatActivity {
                                 @Override
                                 public void run() {
                                     String msg = translateFuncEvent(code, param);
-                                    Log.d(TAG,  msg);
+                                    Log.d(TAG, msg);
                                     Toast.makeText(MainActivity.this, msg, Toast.LENGTH_SHORT).show();
                                 }
                             });
@@ -274,7 +278,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String translateFuncEvent(int code, int param) {
-        return String.format(Locale.getDefault(),"code: %X  param: %d", code, param);
+        return String.format(Locale.getDefault(), "code: %X  param: %d", code, param);
     }
 
     private void updateConnectionState(Device device, int state, Button view) {
@@ -298,31 +302,21 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void toSetting() {
+    private void goToLocationPage() {
         Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+        startActivity(intent);
+    }
+
+    private void goToAppInfoPage() {
+        Intent intent = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+        Uri uri = Uri.fromParts("package", getPackageName(), null);
+        intent.setData(uri);
         startActivity(intent);
     }
 
     private void startScanBle() {
 
-        if (!BTUtil.isSupportBle()) {
-            Toast.makeText(this, "Not support ble ", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        if (!BTUtil.isOpened()) {
-            Toast.makeText(this, "Please turn on Bluetooth ", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
-        // Android 6.0 need open location service and grant location permission
-        // See https://developer.android.com/about/versions/marshmallow/android-6.0-changes.html#behavior-hardware-id
-        if (!BTUtil.isLocationProviderOk(getApplicationContext())) {
-            Toast.makeText(this, "Please open the location service ", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (!BTUtil.isLocationPermissionOk(getApplicationContext())) {
-            Toast.makeText(this, "Please grant location permissions ", Toast.LENGTH_SHORT).show();
+        if (!isBluetoothReadyForUse()) {
             return;
         }
 
@@ -360,6 +354,44 @@ public class MainActivity extends AppCompatActivity {
     private void progress(boolean showing) {
         int visibility = showing ? View.VISIBLE : View.GONE;
         binding.progress.setVisibility(visibility);
+    }
+
+    private boolean isBluetoothReadyForUse() {
+        if (!BTUtil.isSupportBle()) {
+            Toast.makeText(this, "Not support ble ", Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        if (!BTUtil.isOpened()) {
+            Toast.makeText(this, "Please turn on Bluetooth ", Toast.LENGTH_SHORT).show();
+            return false;
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            // For Android 12 or higher
+            // See https://developer.android.com/develop/connectivity/bluetooth/bt-permissions?declare-android12-or-higher
+            if (!BTUtil.isBluetoothScanPermissionOk(this)) {
+                Toast.makeText(this, "Please grant bluetooth scan permissions ", Toast.LENGTH_SHORT).show();
+                return false;
+            }
+            if (!BTUtil.isBluetoothConnectPermissionOk(this)) {
+                Toast.makeText(this, "Please grant bluetooth connect permissions ", Toast.LENGTH_SHORT).show();
+                return false;
+            }
+
+        } else if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            // For Android 6 to 11
+            // See https://developer.android.com/about/versions/marshmallow/android-6.0-changes.html#behavior-hardware-id
+            if (!BTUtil.isLocationProviderOk(this)) {
+                Toast.makeText(this, "Please open the location service ", Toast.LENGTH_SHORT).show();
+                return false;
+            }
+            if (!BTUtil.isLocationPermissionOk(this)) {
+                Toast.makeText(this, "Please grant location permissions ", Toast.LENGTH_SHORT).show();
+                return false;
+            }
+        } else {
+            // lower than Android 6.0
+        }
+        return true;
     }
 }
 
